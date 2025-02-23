@@ -1,0 +1,56 @@
+import json
+from kubernetes import client, config
+import sys
+
+def load_config(json_file):
+    """Load the JSON configuration file."""
+    with open(json_file, 'r') as f:
+        return json.load(f)
+
+def create_pod(pod_config):
+    """Create a Kubernetes pod based on the configuration."""
+    # Load kubeconfig (assumes you have kubectl configured)
+    config.load_kube_config()
+
+    # Initialize Kubernetes API client
+    core_v1 = client.CoreV1Api()
+
+    # Define the pod manifest
+    pod_manifest = {
+        "apiVersion": "v1",
+        "kind": "Pod",
+        "metadata": {
+            "name": pod_config["name"]
+        },
+        "spec": {
+            "containers": [
+                {
+                    "name": pod_config["name"],
+                    "image": pod_config["image"],
+                    "ports": [{"containerPort": port["containerPort"]} for port in pod_config["ports"]],
+                    "env": [{"name": env["name"], "value": env["value"]} for env in pod_config["env"]]
+                }
+            ]
+        }
+    }
+
+    # Create the pod
+    try:
+        pod = core_v1.create_namespaced_pod(namespace="default", body=pod_manifest)
+        print(f"Pod '{pod.metadata.name}' created successfully!")
+    except Exception as e:
+        print(f"Failed to create pod: {e}")
+
+if __name__ == "__main__":
+
+    if len(sys.argv) != 2:
+        print("Usage: python deploy_pod.py <config_file.json>")
+        sys.exit(1)
+
+    # Load the JSON configuration
+    config_file = sys.argv[1]
+    pod_config = load_config(config_file)
+
+    # Deploy the pod
+    create_pod(pod_config)
+
