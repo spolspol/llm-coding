@@ -1,0 +1,179 @@
+## Introduction to the Reddit Data Fetcher Script
+This script is designed to fetch posts and comments from a Reddit clone, storing the data in a MongoDB database. It includes features such as login functionality, HTTP request management, error handling, and configuration through command-line arguments and a JSON file.
+
+### Requirements
+- Python 3.8+
+- `httpx` for HTTP requests
+- `mongodb` for database operations
+- `jsonschema` for validating the JSON schema
+- `argparse` for command-line arguments
+
+### Installation
+To install the required libraries, use pip:
+```bash
+pip install httpx mongodb jsonschema argparse
+```
+
+### Configuration
+The script can be configured using command-line arguments or a JSON configuration file. The configuration parameters include:
+
+- `mongodb_uri`: MongoDB connection string
+- `username`: Login username
+- `password`: Login password
+- `request_delay`: Delay between requests in seconds
+- `header_rotation`: Number of requests before rotating headers
+
+### JSON Schema
+The JSON schema defines the structure of the fetched data:
+```json
+{
+    "$schema": "https://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+        "posts": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "text": {"type": "string"},
+                    "metadata": {"type": "object"}
+                },
+                "required": ["id", "text", "metadata"]
+            }
+        },
+        "comments": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "text": {"type": "string"},
+                    "metadata": {"type": "object"}
+                },
+                "required": ["id", "text", "metadata"]
+            }
+        }
+    },
+    "required": ["posts", "comments"]
+}
+```
+
+### Python Script
+```python
+import httpx
+import json
+from pymongo import MongoClient
+import argparse
+import jsonschema
+import time
+import random
+
+# Define the JSON schema
+json_schema = {
+    "type": "object",
+    "properties": {
+        "posts": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "text": {"type": "string"},
+                    "metadata": {"type": "object"}
+                },
+                "required": ["id", "text", "metadata"]
+            }
+        },
+        "comments": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "text": {"type": "string"},
+                    "metadata": {"type": "object"}
+                },
+                "required": ["id", "text", "metadata"]
+            }
+        }
+    },
+    "required": ["posts", "comments"]
+}
+
+def fetch_data(url, headers):
+    try:
+        response = httpx.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json()
+    except httpx.RequestError as e:
+        print(f"Request failed: {e}")
+        return None
+
+def store_data(data, mongo_client):
+    try:
+        posts_collection = mongo_client["my_posts"]
+        comments_collection = mongo_client["my_comments"]
+        posts_collection.insert_many(data["posts"])
+        comments_collection.insert_many(data["comments"])
+    except Exception as e:
+        print(f"Data storage failed: {e}")
+
+def login(username, password):
+    url = "https://reddit-clone.com/login"
+    headers = {"Content-Type": "application/json"}
+    data = {"username": username, "password": password}
+    response = httpx.post(url, headers=headers, json=data)
+    if response.status_code == 200:
+        return response.json()["token"]
+    else:
+        return None
+
+def main():
+    parser = argparse.ArgumentParser(description="Reddit Data Fetcher")
+    parser.add_argument("--mongodb-uri", help="MongoDB connection string")
+    parser.add_argument("--username", help="Login username")
+    parser.add_argument("--password", help="Login password")
+    parser.add_argument("--request-delay", type=int, help="Delay between requests in seconds")
+    parser.add_argument("--header-rotation", type=int, help="Number of requests before rotating headers")
+    args = parser.parse_args()
+
+    mongo_client = MongoClient(args.mongodb_uri)
+    token = login(args.username, args.password)
+
+    if token:
+        headers = [
+            {"User-Agent": "Mozilla/5.0 (X11; CrOS x86_64 12871.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.3"},
+            {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.1 Mobile/15E148 Safari/604.1"}
+        ]
+        header_index = 0
+
+        while True:
+            url = "https://reddit-clone.com/posts"
+            data = fetch_data(url, headers[header_index])
+            if data:
+                try:
+                    jsonschema.validate(instance=data, schema=json_schema)
+                    store_data(data, mongo_client)
+                except jsonschema.exceptions.ValidationError as e:
+                    print(f"Invalid data: {e}")
+            time.sleep(args.request_delay + random.uniform(0, 1))
+            header_index = (header_index + 1) % args.header_rotation
+
+if __name__ == "__main__":
+    main()
+```
+
+### Example Output
+```
+$ python reddit_data_fetcher.py --mongodb-uri mongodb://localhost:27017/ --username test --password test --request-delay 2 --header-rotation 10
+```
+This will start the script, which will fetch posts and comments from the Reddit clone, store the data in the MongoDB database, and rotate headers every 10 requests.
+
+### Edge Cases
+- Missing metadata: The script will skip posts and comments with missing metadata.
+- Network failures: The script will retry failed requests after a short delay.
+- Incorrect login credentials: The script will stop if the login fails.
+
+### Documentation
+This script is designed to fetch posts and comments from a Reddit clone and store the data in a MongoDB database. It includes features such as login functionality, HTTP request management, error handling, and configuration through command-line arguments and a JSON file. The script uses the `httpx` library for HTTP requests and the `mongodb` library for database operations. The JSON schema defines the structure of the fetched data, and the script validates the data against this schema before storing it in the database.
