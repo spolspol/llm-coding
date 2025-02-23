@@ -1,0 +1,136 @@
+# main.py
+from pykube import HTTPClient, Deployment
+from kubernetes import client, config
+
+# Initialize Kubernetes client
+config.load_kube_config()  # Loads kubeconfig from default location
+kube_client = HTTPClient(client.Configuration.get_default_copy())
+
+def create_deployment(name, replicas, image="nginx:latest"):
+    """Create a Kubernetes deployment."""
+    deployment = Deployment(
+        kube_client,
+        {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {"name": name},
+            "spec": {
+                "replicas": replicas,
+                "selector": {"matchLabels": {"app": name}},
+                "template": {
+                    "metadata": {"labels": {"app": name}},
+                    "spec": {
+                        "containers": [{"name": name, "image": image}]
+                    },
+                },
+            },
+        },
+    )
+    deployment.create()
+    return deployment
+
+
+def get_deployment_status(deployment_name):
+    """Retrieve the status of a deployment."""
+    deployment = Deployment.objects(kube_client).get_by_name(deployment_name)
+    return deployment.obj["status"]
+
+
+def scale_deployment(deployment_name, replicas):
+    """Scale a deployment to the specified number of replicas."""
+    deployment = Deployment.objects(kube_client).get_by_name(deployment_name)
+    deployment.replicas = replicas
+    deployment.update()
+    return deployment
+
+
+def rollout_update(deployment_name, image):
+    """Perform a rolling update on a deployment by updating its image."""
+    deployment = Deployment.objects(kube_client).get_by_name(deployment_name)
+    deployment.obj["spec"]["template"]["spec"]["containers"][0]["image"] = image
+    deployment.update()
+    return deployment
+
+
+def test_deployment(name):
+    """Test the status and scaling of a deployment."""
+    deployment = create_deployment(name, replicas=1)
+    status = get_deployment_status(name)
+    assert status["replicas"] == 1, "Deployment should have 1 replica"
+
+    scale_deployment(name, replicas=3)
+    status = get_deployment_status(name)
+    assert status["replicas"] == 3, "Deployment should have 3 replicas"
+
+    rollout_update(name, image="nginx:1.19.0")
+    status = get_deployment_status(name)
+    assert (
+        "1.19.0" in status["template"]["spec"]["containers"][0]["image"]
+    ), "Deployment image should be updated"
+
+    deployment.delete()
+
+python
+# test_main.py
+from main import create_deployment, get_deployment_status, scale_deployment, rollout_update
+
+def test_create_deployment():
+    deployment = create_deployment("test-deployment", replicas=1)
+    status = get_deployment_status("test-deployment")
+    assert status["replicas"] == 1
+    deployment.delete()
+
+
+def test_scale_deployment():
+    deployment = create_deployment("test-scale-deployment", replicas=1)
+    scale_deployment("test-scale-deployment", replicas=3)
+    status = get_deployment_status("test-scale-deployment")
+    assert status["replicas"] == 3
+    deployment.delete()
+
+
+def test_rollout_update():
+    deployment = create_deployment("test-rollout-deployment", replicas=1)
+    rollout_update("test-rollout-deployment", image="nginx:1.19.0")
+    status = get_deployment_status("test-rollout-deployment")
+    assert "1.19.0" in status["template"]["spec"]["containers"][0]["image"]
+    deployment.delete()
+
+python
+# requirements.txt
+# pykube==0.15.0   #pykube is no longer on version 0.15.0
+pytest==7.4.0
+kubernetes==25.3.0
+
+markdown
+# Kubernetes Deployment Tester
+
+This project provides a Python script to test Kubernetes deployments by verifying their status, scaling, and rolling updates.
+
+## Setup
+
+1. Install `kubectl` and ensure it's configured to access your cluster.
+2. Create a virtual environment and install dependencies:
+    bash
+    pip install -r requirements.txt
+    
+
+## Usage
+
+- To test a deployment:
+    python
+    from main import test_deployment
+    test_deployment("test-deployment")
+    
+
+## Testing
+
+Run the test suite:
+    bash
+    pytest test_main.py
+    
+
+## Maintenance
+
+Monitor the script for issues and update it to handle changes in Kubernetes deployments.
+
