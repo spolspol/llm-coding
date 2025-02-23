@@ -1,0 +1,50 @@
+from kubernetes import client, config
+from kubernetes.client import ApiException
+
+def deploy_llt_module():
+    # Load Kubernetes configuration (use local kubeconfig)
+    config.load_kube_config()
+
+    # Initialize Kubernetes API client
+    api = client.CoreV1Api()
+    apps_api = client.AppsV1Api()
+
+    # Define the LLT Pod template
+    pod_template = client.V1PodTemplateSpec(
+        metadata=client.V1ObjectMeta(labels={"app": "llt-module"}),
+        spec=client.V1PodSpec(
+            containers=[
+                client.V1Container(
+                    name="llt-container",
+                    image="llt-module:v1.0",  # Replace with your LLT container image
+                    resources=client.V1ResourceRequirements(
+                        requests={"cpu": "2", "memory": "4Gi"},
+                        limits={"cpu": "2", "memory": "4Gi"}
+                    )
+                )
+            ]
+        )
+    )
+
+    # Define the deployment
+    deployment = client.V1Deployment(
+        api_version="apps/v1",
+        kind="Deployment",
+        metadata=client.V1ObjectMeta(name="llt-deployment"),
+        spec=client.V1DeploymentSpec(
+            replicas=2,  # Number of replicas
+            selector=client.V1LabelSelector(match_labels={"app": "llt-module"}),
+            template=pod_template
+        )
+    )
+
+    try:
+        # Create the deployment
+        apps_api.create_namespaced_deployment(namespace="default", body=deployment)
+        print("Deployment created successfully!")
+    except ApiException as e:
+        print(f"Failed to create deployment: {e}")
+
+if __name__ == "__main__":
+    deploy_llt_module()
+
